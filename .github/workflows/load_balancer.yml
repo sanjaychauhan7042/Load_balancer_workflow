@@ -29,7 +29,7 @@ jobs:
           VPC_ID="vpc-046956f6b3f1225e2"
           SUBNET_IDS=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID --query "Subnets[*].SubnetId" --output text)
           INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=vpc-id,Values=$VPC_ID" --query "Reservations[*].Instances[*].InstanceId" --output text)
-
+          
           # Create Load Balancer
           LB_ARN=$(aws elbv2 create-load-balancer \
             --name $LB_NAME \
@@ -53,7 +53,7 @@ jobs:
             --vpc-id $VPC_ID \
             --health-check-protocol HTTP \
             --health-check-path / \
-            --health-check-interval-seconds 60 \
+            --health-check-interval-seconds 30 \
             --query "TargetGroups[0].TargetGroupArn" \
             --output text)
 
@@ -70,16 +70,6 @@ jobs:
             aws elbv2 register-targets \
               --target-group-arn $TG_ARN \
               --targets Id=$INSTANCE_ID
-          done
-
-          # Verify Target Health
-          echo "Waiting for targets to pass health checks..."
-          for INSTANCE_ID in $INSTANCE_IDS; do
-            while [ "$(aws elbv2 describe-target-health --target-group-arn $TG_ARN --query 'TargetHealthDescriptions[?Target.Id==`'$INSTANCE_ID'`].TargetHealth.State' --output text)" != "healthy" ]; do
-              echo "Instance $INSTANCE_ID is not healthy yet. Waiting..."
-              sleep 10
-            done
-            echo "Instance $INSTANCE_ID is healthy."
           done
 
           # Create Listener for Load Balancer
