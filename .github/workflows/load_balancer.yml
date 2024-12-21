@@ -27,14 +27,24 @@ jobs:
           LB_NAME="my-load-balancer"
           TARGET_GROUP_NAME="my-target-group"
           VPC_ID="vpc-046956f6b3f1225e2"
+
+          # Get all subnet IDs in the specified VPC
           SUBNET_IDS=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID --query "Subnets[*].SubnetId" --output text)
+
+          # Get all running instance IDs in the specified VPC
           INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=vpc-id,Values=$VPC_ID" --query "Reservations[*].Instances[*].InstanceId" --output text)
-          
-          # Create Load Balancer
+
+          # Get the security group attached to the first running instance
+          INSTANCE_SECURITY_GROUP=$(aws ec2 describe-instances \
+            --instance-ids $(echo $INSTANCE_IDS | awk '{print $1}') \
+            --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" \
+            --output text)
+
+          # Create Load Balancer with the same security group as the instance
           LB_ARN=$(aws elbv2 create-load-balancer \
             --name $LB_NAME \
             --subnets $SUBNET_IDS \
-            --security-groups $(aws ec2 describe-security-groups --filters Name=vpc-id,Values=$VPC_ID --query "SecurityGroups[0].GroupId" --output text) \
+            --security-groups $INSTANCE_SECURITY_GROUP \
             --query "LoadBalancers[0].LoadBalancerArn" --output text)
           echo "Load Balancer ARN: $LB_ARN"
 
@@ -45,7 +55,7 @@ jobs:
           done
           echo "Load Balancer is now provisioned."
 
-          # Create Target Group
+          # Create Target Group with health check configuration
           TG_ARN=$(aws elbv2 create-target-group \
             --name $TARGET_GROUP_NAME \
             --protocol HTTP \
@@ -59,26 +69,26 @@ jobs:
 
           echo "Target Group ARN: $TG_ARN"
 
-          # Check if TG_ARN is empty
+          # Exit if Target Group creation fails
           if [ -z "$TG_ARN" ]; then
             echo "Error: Target Group ARN is empty!"
             exit 1
           fi
 
-          # Register Targets (Instances)
+          # Register running instances to the Target Group
           for INSTANCE_ID in $INSTANCE_IDS; do
             aws elbv2 register-targets \
               --target-group-arn $TG_ARN \
               --targets Id=$INSTANCE_ID
           done
 
-          # Create Listener for Load Balancer
+          # Create a Listener for the Load Balancer
           aws elbv2 create-listener \
             --load-balancer-arn $LB_ARN \
             --protocol HTTP \
             --port 80 \
             --default-actions Type=forward,TargetGroupArn=$TG_ARN
 
-          # Verify Load Balancer
+          # Verify the Load Balancer and Target Group status
           aws elbv2 describe-load-balancers --names $LB_NAME
           aws elbv2 describe-target-health --target-group-arn $TG_ARN
