@@ -43,7 +43,7 @@ jobs:
             --name $TARGET_GROUP_NAME \
             --protocol HTTP \
             --port 80 \
-            --vpc-id vpc-046956f6b3f1225e2 \
+            --vpc-id $VPC_ID \
             --health-check-protocol HTTP \
             --health-check-path / \
             --health-check-interval-seconds 30 \
