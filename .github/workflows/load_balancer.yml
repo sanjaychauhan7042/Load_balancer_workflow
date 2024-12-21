@@ -37,7 +37,14 @@ jobs:
             --security-groups $(aws ec2 describe-security-groups --filters Name=vpc-id,Values=$VPC_ID --query "SecurityGroups[0].GroupId" --output text) \
             --query "LoadBalancers[0].LoadBalancerArn" --output text)
           echo "Load Balancer ARN: $LB_ARN"
-          
+
+          # Wait for Load Balancer to be provisioned
+          while [ "$(aws elbv2 describe-load-balancers --names $LB_NAME --query 'LoadBalancers[0].State.Code' --output text)" == "provisioning" ]; do
+            echo "Waiting for Load Balancer to be provisioned..."
+            sleep 10
+          done
+          echo "Load Balancer is now provisioned."
+
           # Create Target Group
           TG_ARN=$(aws elbv2 create-target-group \
             --name $TARGET_GROUP_NAME \
@@ -49,7 +56,14 @@ jobs:
             --health-check-interval-seconds 30 \
             --query "TargetGroups[0].TargetGroupArn" \
             --output text)
+
           echo "Target Group ARN: $TG_ARN"
+
+          # Check if TG_ARN is empty
+          if [ -z "$TG_ARN" ]; then
+            echo "Error: Target Group ARN is empty!"
+            exit 1
+          fi
 
           # Register Targets (Instances)
           for INSTANCE_ID in $INSTANCE_IDS; do
@@ -64,8 +78,7 @@ jobs:
             --protocol HTTP \
             --port 80 \
             --default-actions Type=forward,TargetGroupArn=$TG_ARN
-          
-      - name: Verify Load Balancer
-        run: |
+
+          # Verify Load Balancer
           aws elbv2 describe-load-balancers --names $LB_NAME
           aws elbv2 describe-target-health --target-group-arn $TG_ARN
