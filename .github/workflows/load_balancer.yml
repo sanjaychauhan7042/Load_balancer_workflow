@@ -52,7 +52,7 @@ jobs:
             --port 80 \
             --vpc-id $VPC_ID \
             --health-check-protocol HTTP \
-            --health-check-path /health
+            --health-check-path / \
             --health-check-interval-seconds 60 \
             --query "TargetGroups[0].TargetGroupArn" \
             --output text)
